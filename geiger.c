@@ -132,21 +132,63 @@ geiger_callback(const void *input, void *output, unsigned long frameCount,
 }
 
 
+/* Rate smoothing over interv_duration seconds. The struct smooth_counter is
+   used with the smooth_rate function. As the smooth_rate display itself the
+   rate every interv_duration period, it doesn't return anything, but we could
+   imagine this function returning the rate. The rate implementation should
+   then probably be modified to use a sliding period. */
+
+struct smooth_counter {
+	const int interv_duration;
+	PaTime interv_start;
+	uint64_t interv_count;
+};
+
+void
+smooth_rate(struct smooth_counter *sc, struct countdata *data)
+{
+	sc->interv_count += data->count;
+	double duration = data->last_spl_time - sc->interv_start;
+	if (duration >= sc->interv_duration) {
+		fprintf(stderr, "current rate over %.1f seconds: %.1f CPM\n",
+			duration, 60 * sc->interv_count / duration);
+
+		sc->interv_count = 0;
+		sc->interv_start = data->last_spl_time;
+	}
+
+}
+
+
+
 /* This is a placeholder for a function called regularly that could be used
-   to process or display the new data. */
+   to process or display the new data. Only sample code currently. */
 static void
 process_new_data(struct countdata *data)
 {
 	static uint64_t total_count;
 	static PaTime prev_time;
 
+
+	static struct smooth_counter c10 = {10, 0, 0};
+	smooth_rate(&c10, data);
+
+	static struct smooth_counter c60 = {60, 0, 0};
+	smooth_rate(&c60, data);
+
+	static struct smooth_counter c3600 = {3600, 0, 0};
+	smooth_rate(&c3600, data);
+
+
+
 	if (data->count == 0)
 		return;
-
 	total_count += data->count;
 
-	fprintf(stderr, "current rate: %f /s\n",
-		data->count / (data->last_spl_time - prev_time));
+
+	// rate between two calls (unless there is no new impulsion).
+	// fprintf(stderr, "current rate: %.0f CPM\n",
+	//	60 * data->count / (data->last_spl_time - prev_time));
 
 
 	prev_time = data->last_spl_time;
@@ -214,7 +256,7 @@ main(int argc, char *argv[])
 {
 	PaDeviceIndex dev_used = 0; /* To be initialized: will allow selection
 				       of the soundcard / audio device used. */
-	int threshold = 4; /* The detection threshold should be set to a "good"
+	int threshold = 5; /* The detection threshold should be set to a "good"
 			      default value, with a way for the user to specify
 			      a different value. */
 
@@ -255,7 +297,7 @@ main(int argc, char *argv[])
 	time_t t0 = time(NULL);
 
 	while(!quit) {
-		Pa_Sleep(1000);
+		Pa_Sleep(500);
 		process_new_data(&cdata);
 	}
 
