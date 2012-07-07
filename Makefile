@@ -1,4 +1,5 @@
 CC=gcc
+CXX=g++
 CFLAGS=-std=c99 -Wall -pedantic
 LDLIBS=-lportaudio
 
@@ -10,5 +11,5 @@ LDFLAGS=-L/usr/local/lib/portaudio2
 #CPPFLAGS=
 #LDFLAGS=
 
-all: geiger
+all: geiger geigerwave
 

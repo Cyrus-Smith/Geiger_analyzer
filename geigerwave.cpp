@@ -7,16 +7,33 @@
  * Structure pour le fichier WAVE
  * Récupéré depuis http://www.high-geek.com/archives/169
  */
+
+#if defined WIN32 && defined _MSC_VER
+// définis par le compilateur Microsoft
+typedef __int8 int8_t;
+typedef __int16 int16_t;
+typedef __int32 int32_t;
+typedef __int64 int64_t;
+typedef unsigned __int8 uint8_t;
+typedef unsigned __int16 uint16_t;
+typedef unsigned __int32 uint32_t;
+typedef unsigned __int64 uint64_t;
+#else
+#include <errno.h>
+#include <stdint.h>
+#include <stdbool.h>
+#endif
+
 /*! 
 * def unsigned long word 
 * Variable de 4 octets 
 */  
-typedef unsigned long word;  
+typedef uint32_t word;  
 /*! 
 * def unsigned long dword 
 * Variable de 4 octets 
 */  
-typedef unsigned long dword;  
+typedef uint32_t dword;  
       
 // Structure  
 /** 
@@ -73,26 +90,6 @@ typedef struct WAVE
 	} data;  
 } WAVE;  
 
-#if defined WIN32 && defined _MSC_VER
-// définis par le compilateur Microsoft
-typedef __int8 int8_t;
-typedef __int16 int16_t;
-typedef __int32 int32_t;
-typedef __int64 int64_t;
-typedef unsigned __int8 uint8_t;
-typedef unsigned __int16 uint16_t;
-typedef unsigned __int32 uint32_t;
-typedef unsigned __int64 uint64_t;
-#else
-typedef char int8_t;
-typedef short int16_t;
-typedef long int32_t;
-typedef longlong int64_t;
-typedef unsigned char uint8_t;
-typedef unsigned short uint16_t;
-typedef unsigned long uint32_t;
-typedef unsigned longlong uint64_t;
-#endif
 
 #define INT8_MAX	(127)
 #define INT8_MIN	(-128)
@@ -162,7 +159,7 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	// TODO : permettre de configurer le seuil à la ligne de commande
-	const int nThreshold=5;
+	const int nThreshold= 1000;
 	ProcessFile(argv[1],nThreshold);
 
 	return EXIT_SUCCESS;
