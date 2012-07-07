@@ -3,6 +3,9 @@
 #include <string.h>
 
 
+#define DEFAULT_THRESHOLD	(1000)
+#define DEFAULT_LEAVING_TIME_THRESHOLD (0.0001)	// 100µs
+
 /*************************************
  * Structure pour le fichier WAVE
  * Récupéré depuis http://www.high-geek.com/archives/169
@@ -28,7 +31,7 @@ typedef unsigned __int64 uint64_t;
 * def unsigned long word 
 * Variable de 4 octets 
 */  
-typedef uint32_t word;  
+typedef unsigned short word;  
 /*! 
 * def unsigned long dword 
 * Variable de 4 octets 
@@ -53,7 +56,7 @@ typedef struct WAVE
 	*brief Description principal du fichier 
 	* "RIFF" (chunk descriptor) structure décrivant la nature du fichier. 
 	*/  
-	struct RIFF
+	struct
 	{  
 		char ChunkID[4];    // contient les lettres "RIFF" pour indiquer que le fichier est codé selon la norme RIFF  
 		word ChunkSize;        // taille du fichier entier en octets (sans compter les 8 octets de ce champ (4o) et le champ précédent CunkID (4o)  
@@ -65,16 +68,16 @@ typedef struct WAVE
 	*brief Sprécifications du format audio 
 	* "fmt " (sub-chunk) structure décrivant le format des données audio 
 	*/  
-	struct fmt
+	struct
 	{  
 		char Subchunk1ID[4];    // contient les lettres "fmt " pour indiquer les données à suivre décrivent le format des données audio  
 		dword Subchunk1Size;    // taille en octet des données à suivre (qui suivent cette variable) 16 Pour un fichier PCM  
-		short AudioFormat;        // format de compression (une valeur autre que 1 indique une compression)  
-		short NumChannels;        // nombre de canaux: Mono = 1, Stereo = 2, etc..  
+		word AudioFormat;        // format de compression (une valeur autre que 1 indique une compression)  
+		word NumChannels;        // nombre de canaux: Mono = 1, Stereo = 2, etc..  
 		dword SampleRate;        // fréquence d'échantillonage, ex 44100, 44800 (nombre d'échantillons par secondes)  
 		dword ByteRate;            // nombre d'octects par secondes  
-		short Blockalign;        // nombre d'octects pour coder un échantillon  
-		short BitsPerSample;    // nombre de bits pour coder un échantillon  
+		word Blockalign;        // nombre d'octects pour coder un échantillon  
+		word BitsPerSample;    // nombre de bits pour coder un échantillon  
 	} fmt;  
       
 	/** 
@@ -83,7 +86,7 @@ typedef struct WAVE
 	*brief Données du fichier audio 
 	* "data" (sub-chunk) contient les données audio, les échantillons et le nombre d'octets qu'ils représentent. 
 	*/  
-	struct data
+	struct
 	{  
 		char Subchunk2ID[4];    // contient les lettres "data" pour indiquer que les données à suivre sont les données audio (les échantillons et)  
 		dword Subchunk2Size;    // taille des données audio (nombre total d'octets codant les données audio)  
@@ -134,21 +137,6 @@ peakp(int16_t a, int16_t b, int16_t c, int th)
 }
 
 
-/* This structure will hold data to and from the counting algorithm.
-An instance of this structure is used with the callback function
-that process the audio input. */
-struct countdata {
-	double start_time;
-	uint64_t count;
-	int threshold; // detection threshold to filter noise
-	int16_t last_values[2]; /* remember the last values between calls to the
-					callback fct */
-	double last_spl_time;   /* timestamp for the last sample processed */
-	uint64_t sample_number; /* count the number of samples (= time) */
-};
-static const struct countdata init_cd = {0.0, 0, 0, {0,0}, 0.0, 0};
-
-
 static bool ProcessFile(const char *zFilename, const int nThreshold);
 
 int main(int argc, char *argv[])
@@ -159,7 +147,7 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	// TODO : permettre de configurer le seuil à la ligne de commande
-	const int nThreshold= 1000;
+	const int nThreshold=200;
 	ProcessFile(argv[1],nThreshold);
 
 	return EXIT_SUCCESS;
@@ -208,7 +196,7 @@ static bool ReadWaveFile(const char *zFilename,
 		nSampleRate=Header.fmt.SampleRate;
 
 		//remplissage du tableau d'échantillons data[] de la structure WAVE  
-		fread(pData, sizeof(short), nSampleCount, file);  
+		nSampleCount=fread(pData, sizeof(short), nSampleCount, file);  
 		// tout est ok!
 	} while (false);
 
@@ -230,37 +218,221 @@ static bool ReadWaveFile(const char *zFilename,
 }
 
 
-static bool ProcessData(struct countdata *data,
-						const int16_t *pData,
+class IAnalyser
+{
+public:
+	virtual ~IAnalyser() {};
+	virtual bool ProcessData(const int16_t *pData,
+						const int32_t nSampleCount,
+						const int32_t nSampleRate) = 0;
+
+	static IAnalyser *New();
+};
+
+#if 0
+/* This structure will hold data to and from the counting algorithm.
+An instance of this structure is used with the callback function
+that process the audio input. */
+class CCountData : public IAnalyser
+{
+public:
+	double start_time;
+	uint64_t count;
+	int threshold; // detection threshold to filter noise
+	int16_t last_values[2]; /* remember the last values between calls to the
+					callback fct */
+	double last_spl_time;   /* timestamp for the last sample processed */
+	uint64_t sample_number; /* count the number of samples (= time) */
+
+	CCountData();
+	virtual ~CCountData();
+	virtual bool ProcessData(const int16_t *pData,
+						const int32_t nSampleCount,
+						const int32_t nSampleRate);
+};
+
+CCountData::CCountData()
+	: start_time(0.0)
+	, count(0)
+	, threshold(DEFAULT_THRESHOLD)
+	, last_spl_time(0.0)
+	, sample_number(0)
+{
+	last_values[0]=last_values[1]=0;
+}
+
+CCountData::~CCountData()
+{
+}
+
+bool CCountData::ProcessData(const int16_t *pData,
 						const int32_t nSampleCount,
 						const int32_t nSampleRate)
 {
-	int16_t prev0 = data->last_values[0];
-	int16_t prev1 = data->last_values[1];
-	double time = data->start_time;
+	int16_t prev0 = last_values[0];
+	int16_t prev1 = last_values[1];
+	double time = start_time;
 	for (int i = 0; i < nSampleCount; i++)
 	{
 	//	fprintf(stderr, "%d ", in[i]);
 		/* The actual sample rate seems to be only an approximation of
 		   SAMPLE_RATE, hence 'time + (double) i / SAMPLE_RATE' is only
 		   an estimation of the sampling time. */
-		if (peakp(prev0, prev1, pData[i], data->threshold))
+		if (peakp(prev0, prev1, pData[i], threshold))
 		{
-			data->count++;
+			count++;
 			printf("%.4f\t%6d\n", time + (double) i / nSampleRate,
 			       prev1);
 		}
 		prev0 = prev1;
 		prev1 = pData[i];
-		data->sample_number++;
+		sample_number++;
 	}
-	data->last_values[0] = prev0;
-	data->last_values[1] = prev1;
-	data->last_spl_time = time + (nSampleCount - 1.0) / nSampleRate;
+	last_values[0] = prev0;
+	last_values[1] = prev1;
+	last_spl_time = time + (nSampleCount - 1.0) / nSampleRate;
 
 	return true;
 }
 
+IAnalyser *IAnalyser::New()
+{
+	return new CCountData;
+}
+
+#else
+class CPeakDetector : public IAnalyser
+{
+public:
+	double m_fStartTime;
+	double m_fLastSplTime;   /* timestamp for the last sample processed */
+	uint64_t m_nCount;
+	uint64_t m_nSampleNumber;
+	int m_nThreshold; // detection threshold to filter noise
+	double m_fLeavingPeakTimeThreshold;
+	CPeakDetector();
+	virtual ~CPeakDetector();
+	virtual bool ProcessData(const int16_t *pData,
+						const int32_t nSampleCount,
+						const int32_t nSampleRate);
+
+private:
+	enum EState
+	{
+		EState_Noise,
+		EState_Peak,
+		EState_Leaving,
+	} m_eCurrentState;
+	double m_fLeavingPeakTime;
+	double m_fMaxPeakTime;
+	int m_nMaxPeakAmplitude;
+};
+
+CPeakDetector::CPeakDetector()
+	: m_fStartTime(0.0)
+	, m_nCount(0)
+	, m_nThreshold(DEFAULT_THRESHOLD)
+	, m_fLastSplTime(0.0)
+	, m_nSampleNumber(0)
+	, m_eCurrentState(EState_Noise)
+	, m_fLeavingPeakTimeThreshold(DEFAULT_LEAVING_TIME_THRESHOLD)
+{
+}
+
+CPeakDetector::~CPeakDetector()
+{
+}
+
+bool CPeakDetector::ProcessData(const int16_t *pData,
+						const int32_t nSampleCount,
+						const int32_t nSampleRate)
+{
+	EState eCurrentState=m_eCurrentState;
+	const double fStartTime = m_fStartTime;
+	double fSampleTime=fStartTime;
+
+	for (int i = 0; i < nSampleCount; i++)
+	{
+		// on regarde si le sample actuel est dans la zone ou pas
+		const int nAbsSample=abs(pData[i]);
+		bool bAboveThreshold=nAbsSample>=m_nThreshold;
+		fSampleTime=fStartTime + (double) i / nSampleRate;
+
+	//	fprintf(stderr,"%.4lf\t%d\n", fSampleTime,pData[i]);
+		switch (eCurrentState)
+		{
+			case EState_Noise:
+				if (bAboveThreshold)
+				{
+					// on vient de dépasser le seuil
+					// on a donc détecté un peak
+					
+					// on sauve les valeurs
+					m_fMaxPeakTime=fSampleTime;
+					m_nMaxPeakAmplitude=nAbsSample;
+
+					// on change l'état
+					eCurrentState=EState_Peak;
+				}
+				break;
+
+			case EState_Leaving:
+				// dans cette état, on a eu un pic et on est en dessous du seuil
+				// si on reste en dessous du seuil un certain temps, on considère qu'on a quitter le pic
+				// donc, on repasse en état Noise
+				// si on repasse au dessus du pic, le pic n'est pas terminé
+				// on revient dans l'état Peak
+				if (!bAboveThreshold)
+				{
+					// on est en dessous du seuil
+					// on regarde si ça fait longtemps
+					if ( (fSampleTime-m_fLeavingPeakTime) > m_fLeavingPeakTimeThreshold)
+					{
+						// le pic est passé
+						m_nCount++;
+
+						printf("%.4lf\t%6d\n", m_fMaxPeakTime, m_nMaxPeakAmplitude);
+						// on passe à l'état Noise
+						eCurrentState=EState_Noise;
+					}
+					break;
+				}
+				// on est repassé au dessus du seuil, on n'est donc pas sorti du pic
+				eCurrentState=EState_Peak;
+
+			case EState_Peak:
+				if (bAboveThreshold)
+				{
+					// tant qu'on est au dessus du seuil, on met seulement à jour les valeurs
+					// on cherche le plus gros peak
+					if (m_nMaxPeakAmplitude<nAbsSample)
+					{
+						m_fMaxPeakTime=fSampleTime;
+						m_nMaxPeakAmplitude=nAbsSample;
+					}
+				}
+				else
+				{
+					// on est redescendu en dessous du seuil
+					// on passe dans l'état Leaving
+					m_fLeavingPeakTime=fSampleTime;
+					eCurrentState=EState_Leaving;
+				}
+				break;
+		}
+	}
+	// on sauve l'état pour les échantillons suivants
+	m_eCurrentState=eCurrentState;
+	m_fStartTime=fSampleTime;
+
+	return true;
+}
+
+IAnalyser *IAnalyser::New()
+{
+	return new CPeakDetector;
+}
+#endif
 
 static bool ProcessFile(const char *zFilename, const int nThreshold)
 {
@@ -273,11 +445,11 @@ static bool ProcessFile(const char *zFilename, const int nThreshold)
 		return false;
 	}
 	
-	struct countdata data;
-	data=init_cd;
-	data.threshold=nThreshold;
+	IAnalyser *pAnalyser=IAnalyser::New();
 
-	ProcessData(&data,pData,nSampleCount,nSampleRate);
+	pAnalyser->ProcessData(pData,nSampleCount,nSampleRate);
+
+	delete pAnalyser;
 
 	free(pData);
 	return true;
