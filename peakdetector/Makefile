@@ -3,10 +3,6 @@ CXX=g++
 CFLAGS=-std=c99 -Wall -pedantic
 LDLIBS=-lsndfile
 
-#DETEC=c1
-#DETEC=c2
-DETEC=ppp
-
 # FreeBSD
 CPPFLAGS=-I/usr/local/include/
 LDFLAGS=-L/usr/local/lib/
@@ -17,7 +13,7 @@ LDFLAGS=-L/usr/local/lib/
 
 all: peakdetector
 
-peakdetector: peakdetector.o detector_$(DETEC).o
+peakdetector: peakdetector.o detector_c1.o detector_ppp.o
 
 clean:
 	rm -f *.o *~

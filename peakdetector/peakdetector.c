@@ -38,7 +38,17 @@
 #include <sndfile.h>
 
 #include "peakdetector.h"
-#include "detector.h"
+#include "detector_c1.h"
+#include "detector_ppp.h"
+
+enum detectors {
+	C1,
+	PPP,
+};
+
+struct detector* (*detecinit[])(uint32_t sample_rate,
+				const struct parameters *params,
+				void (*callback)(double, int16_t)) = { &init_detector_c1, &init_detector_ppp };
 
 static void
 closeaudiostream(SNDFILE* stream)
@@ -87,6 +97,9 @@ main(int argc, char *argv[])
 	/* threshold, Geiger dead time */
 	const struct parameters params = {500, 0.0005};
 
+	/* change this to change detection algo */
+	enum detectors detector = C1; // C1 or PPP
+
 	SF_INFO sinfo;
 	SNDFILE* stream = NULL;
 	{
@@ -100,13 +113,15 @@ main(int argc, char *argv[])
 		assert(stream != NULL);
 	}
 
-	struct detectordata *data;
-	data = init_detector(sinfo.samplerate, &params, &displaycallback);
-	if (data == NULL) {
+	struct detector *d;
+	d = detecinit[detector](sinfo.samplerate, &params, &displaycallback);
+	if (d == NULL) {
 		fprintf(stderr, "Detector initialization failed\n");
 		closeaudiostream(stream);
 		return EXIT_FAILURE;
 	}
+
+	fprintf(stderr, "Using detection algorithm %s\n", d->name);
 
 	const size_t spl_size = 128;
 	int16_t buffer[spl_size];
@@ -115,8 +130,10 @@ main(int argc, char *argv[])
 		int nbfr = sf_readf_short(stream, buffer, spl_size);
 		if (!nbfr)
 			break;
-		detector(buffer, nbfr, data);
+		d->detector(buffer, nbfr, d->data);
 	}
+
+	d->terminate(d);
 
 	closeaudiostream(stream);
 

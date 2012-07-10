@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "detector.h"
+#include "detector_c1.h"
 
 /* This structure will hold data to and from the detection algorithm. */
 struct detectordata {
@@ -85,7 +85,7 @@ dead_timep(struct detectordata *data)
 	return true;
 }
 
-int
+static int
 detector(int16_t *in, size_t inputsize, struct detectordata *data)
 {
 	int16_t prev0 = data->last_values[0];
@@ -110,25 +110,39 @@ detector(int16_t *in, size_t inputsize, struct detectordata *data)
 	return 0;
 }
 
-struct detectordata*
-init_detector(uint32_t sample_rate, const struct parameters *params,
-	      void (*callback)(double, int16_t))
+static int
+terminate_detector(struct detector* d)
 {
-	assert(params != NULL);
-	struct detectordata *data = (struct detectordata *)
-		calloc(1, sizeof(struct detectordata));
-	if (data == NULL)
-		return NULL;
-	data->sample_rate = sample_rate;
-	data->threshold = params->noise_threshold;
-	data->geiger_dead_time = params->geiger_dead_time;
-	data->detection_cb = callback;
-	return data;
-}
-
-int
-terminate_detector(struct detectordata* data)
-{
-	free(data);
+	assert(d != NULL);
+	assert(d->data != NULL);
+	free(d->data);
+	free(d);
 	return 0;
 }
+
+struct detector*
+init_detector_c1(uint32_t sample_rate, const struct parameters *params,
+		 void (*callback)(double, int16_t))
+{
+	assert(params != NULL);
+	struct detector *d = (struct detector*)
+		calloc(1, sizeof(struct detector));
+	if (d == NULL)
+		return NULL;
+	d->data = (struct detectordata *)
+		calloc(1, sizeof(struct detectordata));
+	if (d->data == NULL) {
+		free(d);
+		return NULL;
+	}
+
+	d->name = "C1";
+	d->detector = &detector;
+	d->terminate = &terminate_detector;
+	d->data->sample_rate = sample_rate;
+	d->data->threshold = params->noise_threshold;
+	d->data->geiger_dead_time = params->geiger_dead_time;
+	d->data->detection_cb = callback;
+	return d;
+}
+

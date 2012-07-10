@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "detector.h"
+#include "detector_ppp.h"
 
 /* This structure holds data to and from the detection algorithm. */
 struct detectordata {
@@ -54,7 +54,7 @@ dead_timep(struct detectordata *data)
 	return true;
 }
 
-int
+static int
 detector(int16_t *in, size_t inputsize, struct detectordata *data)
 {
 	for (int i = 0; i < inputsize; i++) {
@@ -71,25 +71,40 @@ detector(int16_t *in, size_t inputsize, struct detectordata *data)
 	return 0;
 }
 
-struct detectordata*
-init_detector(uint32_t sample_rate, const struct parameters *params,
+static int
+terminate_detector(struct detector* d)
+{
+	assert(d != NULL);
+	assert(d->data != NULL);
+	free(d->data);
+	free(d);
+	return 0;
+}
+
+struct detector*
+init_detector_ppp(uint32_t sample_rate, const struct parameters *params,
 	      void (*callback)(double, int16_t))
 {
 	assert(params != NULL);
-	struct detectordata *data = (struct detectordata *)
-		calloc(1, sizeof(struct detectordata));
-	if (data == NULL)
+	struct detector *d = (struct detector*)
+		calloc(1, sizeof(struct detector));
+	if (d == NULL)
 		return NULL;
-	data->sample_rate = sample_rate;
-	data->threshold = params->noise_threshold;
-	data->geiger_dead_time = params->geiger_dead_time + 0.0003;
-	data->detection_cb = callback;
-	return data;
+	d->data = (struct detectordata *)
+		calloc(1, sizeof(struct detectordata));
+	if (d->data == NULL) {
+		free(d);
+		return NULL;
+	}
+
+	d->name = "PPP";
+	d->detector = &detector;
+	d->terminate = &terminate_detector;
+	d->data->sample_rate = sample_rate;
+	d->data->threshold = params->noise_threshold;
+	d->data->geiger_dead_time = params->geiger_dead_time + 0.0003;
+	d->data->detection_cb = callback;
+	return d;
 }
 
-int
-terminate_detector(struct detectordata* data)
-{
-	free(data);
-	return 0;
-}
+
