@@ -12,7 +12,7 @@ my $avg_on = 10;            # Number of values on which to calculate the average
 my $delay = 10;
 
 
-my $muRph2muSvph = 1/100;
+my $mRph2muSvph = 10;
 my $irradtot = 0;
 my $count = 0;
 
@@ -35,7 +35,7 @@ sub CPMaverage {
 }
 
 sub displaytotalfr {
-        $irradtot = $count * 60 * ($CPM2mRph * 1000) * $muRph2muSvph;
+        $irradtot = $count * $CPM2mRph * $mRph2muSvph;
 	printf "Total: %u impulsions detectees; Dose recue: %10.3e microSv.", $count, $irradtot;
 }
 
