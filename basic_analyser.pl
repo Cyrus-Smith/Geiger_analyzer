@@ -2,7 +2,19 @@
 
 use warnings;
 
-my $avg_on = 10; # Number of value on which to calculate the average
+my $CPM2mRph = 1/(60*11);   # Conversion factor depending on Geiger-Mueller tube.
+                            #Here 11 CPS -> 1 mR/h.
+
+my $avg_on = 10;            # Number of values on which to calculate the averages
+
+
+
+my $delay = 10;
+
+
+my $muRph2muSvph = 1/100;
+my $irradtot = 0;
+my $count = 0;
 
 sub CPMaverage {
 	my $on = shift;
@@ -22,14 +34,48 @@ sub CPMaverage {
 
 }
 
+sub displaytotalfr {
+        $irradtot = $count * 60 * ($CPM2mRph * 1000) * $muRph2muSvph;
+	printf "Total: %u impulsions detectees; Dose recue: %10.3e microSv.", $count, $irradtot;
+}
+
+sub displayaveragefr {
+        my $on = shift;
+	my @values = @_;
+	my $CPMaverage10 = CPMaverage($on, @values);
+	my $CPSaverage10 = $CPMaverage10 / 60;
+	my $mRpH = $CPMaverage10 * $CPM2mRph;
+	printf " | Moyenne glissante sur %u valeurs: %10.4f CPM", $on, $CPMaverage10;
+	printf " = %9.5f CPS", $CPSaverage10;
+	printf "--> exposition actuelle: %4.2f mR/h", $mRpH;
+}
+
+sub displayfr {
+	my $on = shift;
+	my @values = @_;
+	print "t = $values[-1][0]. | ";
+	displaytotalfr();
+	if (scalar(@values) >= $on) {
+	        displayaveragefr($on, @values);
+	}
+	print "\n";
+}
+
+print "Using a conversion factor of $CPM2mRph mR/h <-> 1 CPM\n";
+
 my @vals = ();
+my $dt = 0;
 while (<>) {
 	my ($t, $a) = /(\d+\.\d*)\s+(\d+)/;
 	push @vals, [$t, $a];
-	$avg_on = 10;
-	if (scalar(@vals) >= $avg_on) {
-		my $average10 = CPMaverage($avg_on, @vals);
-		print "t = $vals[-1][0]: ";
-		print "Moyenne glissante sur $avg_on valeurs: $average10 CPM\n";
+	$count++;
+
+	if ($t - $dt > $delay) {
+	        displayfr($avg_on, @vals);
+		$dt = $t;
 	}
 }
+
+print "Total: En $vals[-1][0] secondes: ";
+displaytotalfr($avg_on, @vals);
+print "\n";
