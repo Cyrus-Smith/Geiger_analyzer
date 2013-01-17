@@ -78,6 +78,10 @@ peakp(int16_t a, int16_t b, int16_t c, int th)
 static bool
 dead_timep(struct detectordata *data)
 {
+	return false;
+
+/// disabled
+
 	uint64_t spl_diff = data->sample_number - data->last_peak_spl;
 	double time_diff = ((double) spl_diff) / data->sample_rate;
 	if (time_diff >= data->geiger_dead_time)

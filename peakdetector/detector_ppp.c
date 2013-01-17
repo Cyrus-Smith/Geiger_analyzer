@@ -47,6 +47,10 @@ newpeakp(int16_t val, struct detectordata *data)
 static bool
 dead_timep(struct detectordata *data)
 {
+	return false;
+
+/// disabled
+
 	uint64_t spl_diff = data->sample_number - data->last_peak_spl;
 	double time_diff = ((double) spl_diff) / data->sample_rate;
 	if (time_diff >= data->geiger_dead_time)
@@ -102,7 +106,7 @@ init_detector_ppp(uint32_t sample_rate, const struct parameters *params,
 	d->terminate = &terminate_detector;
 	d->data->sample_rate = sample_rate;
 	d->data->threshold = params->noise_threshold;
-	d->data->geiger_dead_time = params->geiger_dead_time + 0.0003;
+	d->data->geiger_dead_time = params->geiger_dead_time;
 	d->data->detection_cb = callback;
 	return d;
 }

@@ -82,6 +82,13 @@ openaudiostream(const char* filename, SF_INFO *sinfo)
 		exit(EXIT_FAILURE);
 
 	}
+
+	if (sinfo->format != (SF_FORMAT_WAV | SF_FORMAT_PCM_16)) {
+		fprintf(stderr, "Input is not a 16-bit PCM WAV file\n");
+		closeaudiostream(stream);
+		exit(EXIT_FAILURE);
+	}
+
 	return stream;
 }
 
@@ -91,23 +98,45 @@ displaycallback(double time, int16_t amplitude)
 	printf("%.4f\t%6d\n", time, amplitude);
 }
 
+static void
+usage(void)
+{
+	fprintf(stderr, "usage: peakdetector algorithm [inputfile]\n");
+	fprintf(stderr, "\t algorithm can be C1 or PPP\n");
+}
+
 int
 main(int argc, char *argv[])
 {
 	/* threshold, Geiger dead time */
-	const struct parameters params = {500, 0.0005};
+	const struct parameters params = {500, 0.001};
 
-	/* change this to change detection algo */
-	enum detectors detector = C1; // C1 or PPP
+	enum detectors detector;
+	{
+		if (argc < 2) {
+			usage();
+			exit(EXIT_FAILURE);
+		}
+		int av1len = strlen(argv[1]);
+
+		if (av1len == 2 && !strncmp(argv[1], "C1", 2)) {
+			detector = C1;
+		} else if (av1len == 3 && !strncmp(argv[1], "PPP", 3)) {
+			detector = PPP;
+		} else {
+			usage();
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	SF_INFO sinfo;
 	SNDFILE* stream = NULL;
 	{
 		char *filename;
-		if (argc < 2)
+		if (argc < 3)
 			filename = "-";
 		else
-			filename = argv[1];
+			filename = argv[2];
 
 		stream = openaudiostream(filename, &sinfo);
 		assert(stream != NULL);
@@ -122,6 +151,7 @@ main(int argc, char *argv[])
 	}
 
 	fprintf(stderr, "Using detection algorithm %s\n", d->name);
+	fprintf(stderr, "Sample rate: %d\n", sinfo.samplerate);
 
 	const size_t spl_size = 128;
 	int16_t buffer[spl_size];
